@@ -1,22 +1,23 @@
 var CONFIG = getConfig();
-if (!('APIKey' in CONFIG)) {
+if (typeof CONFIG.APIKey === 'undefined') {
   CONFIG.APIKey = null
 }
-if (!('AppVeyor' in CONFIG)) {
+if (typeof CONFIG.AppVeyor === 'undefined') {
   CONFIG.AppVeyor = { "repos": [] };
 }
-if (!('CircleCI' in CONFIG)) {
+if (typeof CONFIG.CircleCI === 'undefined') {
   CONFIG.CircleCI = { "repos": [] };
 }
-if (!('GChat' in CONFIG)) {
+if (typeof CONFIG.GChat === 'undefined') {
   CONFIG.GChat = { "verificationToken": null };
 }
-if (!('TravisCI' in CONFIG)) {
+if (typeof CONFIG.TravisCI === 'undefined') {
   CONFIG.TravisCI = { "repos": [] };
 }
-if (!('VSTS' in CONFIG)) {
+if (typeof CONFIG.VSTS === 'undefined') {
   CONFIG.VSTS = { "repos": [] };
 }
+Logger.log(CONFIG);
 
 /**
  * Get the current Sheet details and format Sheet as needed
@@ -161,12 +162,12 @@ function parseSender(event) {
  * @param {Object} e the event to validate 
  */
 function validateEvent(e) {
-  var postData = JSON.parse(e.postData.contents);
-  var postToken = null;
-  if ('token' in postData) {
-    postToken = postData.token;
-  }
   if (typeof e !== 'undefined') {
+    var postData = JSON.parse(e.postData.contents);
+    var postToken = null;
+    if ('token' in postData) {
+      postToken = postData.token;
+    }
     Logger.log(e);
     if (postToken === CONFIG.GChat.verificationToken) {
       return {
@@ -201,7 +202,7 @@ function addEventToSheet(event, source) {
   Logger.log(validation);
   if (validation.success) {
     Logger.log("Adding event to Sheets MQ");
-    sheet.appendRow([nextId, event.postData.contents, "No", source]);
+    sheet.appendRow([nextId, JSON.stringify(JSON.parse(event.postData.contents)), "No", source]);
     Logger.log(event);
   }
   else {
@@ -224,6 +225,7 @@ function doGet(e) {
 function doPost(e) {
   var sender = parseSender(e);
   addEventToSheet(e, sender);
+  return ContentService.createTextOutput('{}');
 }
 
 function testPOST() {

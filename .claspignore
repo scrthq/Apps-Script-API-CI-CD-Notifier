@@ -1,4 +1,3 @@
 .eslintrc.js
-GChatConfig.js
-AppVeyorConfig.js
-TravisCIConfig.js
+Config.js
+**.yml
