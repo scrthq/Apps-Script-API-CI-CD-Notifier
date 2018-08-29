@@ -19,6 +19,7 @@ if (typeof CONFIG.VSTS === 'undefined') {
 }
 Logger.log(CONFIG);
 
+
 /**
  * Get the current Sheet details and format Sheet as needed
  */
