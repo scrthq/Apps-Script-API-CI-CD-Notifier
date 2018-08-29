@@ -102,7 +102,6 @@ dlq.setTabColor("ff0000");
 function cleanupSheet() {  
   var toDelete = [];
   var rows = sheet.getRange(1, 1, sheet.getMaxRows(), sheet.getMaxColumns()).getValues();
-  sheet.autoResizeColumns(1, 4);
   for (var c = 0; c < sheet.getMaxRows(); c++) {
     Logger.log("Checking row: " + c);
     if (rows[c][2] == "") {
@@ -254,6 +253,7 @@ function processPost(event, sender) {
     dlq.appendRow([(new Date()).toLocaleString(), nextId, JSON.stringify(event), JSON.stringify(JSON.parse(event.postData.contents)), 'Unknown[Not Validated]']);
     Logger.log(event);
   }
+  sheet.autoResizeColumns(1, 4);
 }
 
 function doGet(e) {
