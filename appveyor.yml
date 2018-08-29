@@ -1,0 +1,12 @@
+image: Ubuntu
+
+matrix:
+  fast_finish: true
+
+skip_commits:
+  message: /updated readme.*|update readme.*s|\[skip ci\]|\[ci skip\]/
+
+build: off
+
+test_script:
+  - ps: Write-Host "Build Done"

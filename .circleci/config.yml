@@ -1,0 +1,13 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: circleci/node:chakracore
+    steps:
+      - run: echo Build Done
+      # - run: 'curl --data ''{"param1": "value1", "param2": 500}'' --request POST $WEBHOOK'
+workflows:
+  version: 2
+  build:
+    jobs:
+      - build

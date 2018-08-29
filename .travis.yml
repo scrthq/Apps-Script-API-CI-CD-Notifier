@@ -1,0 +1,17 @@
+language: cpp
+python:
+- '3.4'
+git:
+  depth: 1000
+os:
+- linux
+dist: trusty
+notifications:
+  webhooks:
+    urls:
+      secure: 0fKVdotY9e2yNvBCCQWLCa/lTBQqbEONX4yFNHTCATm6NYfkvdidt+OVkYzMi4Wx9wteNQCfFqU4c3h+vRcTEr6RUpLeLDFY83NXXY2fVVA5qEAlJel40G423iTtZKKNsgJQ9pNMs3Ko8ctGMqRZ6KgMufgmnBxXroQ+stAJNew+jWbvj8JaAl+qGz6iktECBpHLJK/S2Bm7afbNIkrCIaaQC3GPuZkwCYX5inObndYiN/0jjeh5vMnyr+Wyt+2eV/30TuttB7SMj9/kwmChVdINMX7fvJvj4/zqa9Jr2K+CVE/tkXZ+a0meTT/zmTe4R6wwffTBski+vvqZ6Ltv57d3SCM3y4SnMcpeyH6OJtSO24Xh4aRm9BndwIOnAj6y0dmb23DfEVyK3dR1nU6U2ejiCxO6fGd0uIwk0Yc+jgUXj/gozbPJ8mGM6m9o6WadmUefZeD5jfofwC2bIuhXJHXlsu2u0VG4ihfxIiojKPr/ZEXtGWnM1HGv7jNat09ahPuybp5FTPNVtYvKyp9NvwfpCL75QeJ8vhPzgMGkV72tK2Y4vUedP7X5qaqoNiXYbPwvIgZa5p65c46Za9YTPOfl8+ExzdxLJ3hQRNW/KvzKy1zCrwUGtiWqB7IoSbchAAiGgxgDozdY34x/Yj7ZDKQsbFtCQN5kdMzy/pB6X5Q=
+    on_success: always
+    on_failure: always
+    on_start: always
+script:
+- echo Build Done
