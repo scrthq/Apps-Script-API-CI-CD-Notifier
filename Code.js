@@ -55,12 +55,12 @@ if (!dlq) {
   Logger.log("Dead Letter Queue sheet not found! Creating...");
   ss.insertSheet("Dead Letters");
   dlq = ss.getSheetByName("Dead Letters");
-  var dlqRange = dlq.getRange("A1:B1");
-  dlqRange.setValues([["DateTime","Id","Event"]]);
+  var dlqRange = dlq.getRange("A1:E1");
+  dlqRange.setValues([["DateTime","Id","Event","PostData","Source"]]);
   dlq.deleteRows(2, (dlq.getMaxRows() - 1));
 }
-if (dlq.getMaxColumns() > 3) {
-  dlq.deleteColumns(4, (dlq.getMaxColumns() - 3));
+if (dlq.getMaxColumns() > 5) {
+  dlq.deleteColumns(6, (dlq.getMaxColumns() - 5));
 }
 var sheetOne = ss.getSheetByName("Sheet1");
 if (sheetOne) {
@@ -137,23 +137,54 @@ function cleanupSheet() {
 function parseSender(event) {
   var postData = JSON.parse(event.postData.contents);
   if ('token' in postData && postData.token === CONFIG.GChat.verificationToken) {
-    return 'GChat';
+    return {
+      "format": "raw",
+      "matched": true,
+      "sender": "GChat"
+    };
   }
   else if ('build_url' in postData && (/^https:\/\/travis-ci.org\/.*/).test(postData.build_url) && CONFIG.TravisCI.repos.includes(postData.repository.owner_name + '/' + postData.repository.name)) {
-    return 'TravisCI';
+    return {
+      "format": "raw",
+      "matched": true,
+      "sender": "TravisCI"
+    };
   }
-  else if ('buildUrl' in postData && (/^https:\/\/ci.appveyor.com\/.*/).test(postData.buildUrl) && CONFIG.AppVeyor.repos.includes(postData.eventData.repositoryName)) {
-    return 'AppVeyor';
+  else if ('eventData' in postData && 'buildUrl' in postData.eventData && (/^https:\/\/ci.appveyor.com\/.*/).test(postData.eventData.buildUrl)) {
+    return {
+      "format": "raw",
+      "matched": true,
+      "sender": "AppVeyor"
+    };
   }
   else if ('resource' in postData && (/^https:\/\/.*.visualstudio.com\/.*/).test(postData.resource.url) && CONFIG.VSTS.repos.includes(postData.eventData.repositoryName)) {
-    return 'VSTS';
+    return {
+      "format": "raw",
+      "matched": true,
+      "sender": "VSTS"
+    };
   }
-  else if ('payload' in postData && (/^https:\/\/circleci.com\/.*/).test(postData.payload.build_url) && CONFIG.CircleCI.repos.includes(postData.payload.username + '/' + postData.payload.reponame)) {
-    return 'CircleCI';
+  else if ('attachments' in postData && ('text' in postData.attachments[0] || 'text' in postData)) {
+    if ((/https:\/\/circleci.com\/.*/).test(postData.attachments[0].text) || (/https:\/\/circleci.com\/.*/).test(postData.text)) {
+      return {
+        "format": "slack",
+        "matched": true,
+        "sender": "CircleCI"
+      };
+    }
+    else if ((/https:\/\/ci.appveyor.com\/.*/).test(postData.attachments[0].text)) {
+      return {
+        "format": "slack",
+        "matched": true,
+        "sender": "AppVeyor"
+      };
+    }
+    else {
+      return { "matched": false };
+    }
   }
   else {
-    return 'Unknown';
-    // Return false;
+    return { "matched": false };
   }
 }
 
@@ -165,24 +196,24 @@ function parseSender(event) {
 function validateEvent(e) {
   if (typeof e !== 'undefined') {
     var postData = JSON.parse(e.postData.contents);
-    var postToken = null;
+    var postToken = '';
     if ('token' in postData) {
       postToken = postData.token;
     }
     Logger.log(e);
-    if (postToken === CONFIG.GChat.verificationToken) {
+    if ('token' in postData && postToken === CONFIG.GChat.verificationToken) {
       return {
         "success": true,
         "text": "Payload Token validated! Hi from Apps Script API!"
       };
     }
-    else if (e.parameter.token in (CONFIG.APIKey, CONFIG.GChat.verificationToken) || postToken in (CONFIG.APIKey, CONFIG.GChat.verificationToken)) {
+    else if (e.parameter.token === CONFIG.APIKey || e.parameter.token === CONFIG.GChat.verificationToken || ('token' in postData && (postToken === CONFIG.APIKey || postToken === CONFIG.GChat.verificationToken))) {
       return {
         "success": true,
         "text": "API Key validated! Hi from Apps Script API!"
       };
     }
-    else if ((!(postToken === null) && postToken != CONFIG.GChat.verificationToken) || (postToken === null && !e.parameter.token)) {
+    else {
       return { "success": false };
     }
   }
@@ -193,22 +224,34 @@ function validateEvent(e) {
  *
  * @param {Object} event the event object from the API call
  * 
- * @param {String} source the source of the event
+ * @param {String} sender the sender of the event returned from parseSender(e)
  */
-function addEventToSheet(event, source) {
-  var idRange = tracker.getRange(2, 1);
-  var nextId = idRange.getValue() + 1;
-  idRange.setValue(nextId);
-  var validation = validateEvent(event);
-  Logger.log(validation);
-  if (validation.success) {
-    Logger.log("Adding event to Sheets MQ");
-    sheet.appendRow([nextId, JSON.stringify(JSON.parse(event.postData.contents)), "No", source]);
+function processPost(event, sender) {
+  if (sender.matched) {
+    var idRange = tracker.getRange(2, 1);
+    var nextId = idRange.getValue() + 1;
+    idRange.setValue(nextId);
+    var validation = validateEvent(event);
+    Logger.log(validation);
+    if (validation.success && sender.matched) {
+      Logger.log("Adding event to Sheets MQ");
+      sheet.appendRow([nextId, JSON.stringify(JSON.parse(event.postData.contents)), "No", sender.sender]);
+      Logger.log(event);
+    }
+    else if (sender.matched && !validation.success) {
+      Logger.log("Sender matched but event not validated! Adding full event to Dead Letters queue");
+      dlq.appendRow([(new Date()).toLocaleString(), nextId, JSON.stringify(event), JSON.stringify(JSON.parse(event.postData.contents)), sender.sender]);
+      Logger.log(event);
+    }
+  }
+  else if (validation.success) {
+    Logger.log("Sender not matched but event was validated! Adding full event to Dead Letters queue for inspection");
+    dlq.appendRow([(new Date()).toLocaleString(), nextId, JSON.stringify(event), JSON.stringify(JSON.parse(event.postData.contents)), 'Unknown[Validated]']);
     Logger.log(event);
   }
   else {
-    Logger.log("Event not validated! Adding full event to Dead Letters queue");
-    dlq.appendRow([(new Date()).toLocaleString(), nextId, JSON.stringify(event)]);
+    Logger.log("Sender not matched and event not validated! Adding full event to Dead Letters queue for inspection");
+    dlq.appendRow([(new Date()).toLocaleString(), nextId, JSON.stringify(event), JSON.stringify(JSON.parse(event.postData.contents)), 'Unknown[Not Validated]']);
     Logger.log(event);
   }
 }
@@ -225,7 +268,8 @@ function doGet(e) {
 
 function doPost(e) {
   var sender = parseSender(e);
-  addEventToSheet(e, sender);
+  processPost(e, sender);
+  // Return a blank JSON object so the sender receives an ack back
   return ContentService.createTextOutput('{}');
 }
 
