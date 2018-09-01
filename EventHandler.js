@@ -1,16 +1,13 @@
 function parseSender(event, config) {
   Logger.log("Parsing sender...");
+  var tracker = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Tracker");
+  var dlq = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Dead Letters");
+  var idRange = tracker.getRange(2, 1);
+  var nextId = idRange.getValue() + 1;
   try {
     var postData = {};
     if ('postData' in event) {
-      if (typeof event.postData.contents === 'string') {
-        Logger.log("Parsing postData into object");
-        postData = JSON.parse(event.postData.contents);
-      }
-      else {
-        Logger.log("postData is already object, leaving as is");
-        postData = event.postData.contents
-      }
+      postData = JSON.parse(event.postData.contents);
     }
     if ('token' in postData && postData.token === config.GChat.verificationToken) {
       return {
@@ -66,6 +63,7 @@ function parseSender(event, config) {
   catch (e) {
     e = (typeof e === 'string') ? new Error(e) : e;
     Logger.severe('%s: %s (line %s, file "%s"). Stack: "%s" . While processing %s.',e.name || '', e.message || '', e.lineNumber || '', e.fileName || '', e.stack || '', '');
+    dlq.appendRow([(new Date()).toLocaleString(), nextId, JSON.stringify(event), event.postData.contents, 'Unknown[Not Validated]']);
     throw e;
   }
 }
@@ -122,11 +120,11 @@ function processPost(event, sender, config) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Queue");
   var tracker = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Tracker");
   var dlq = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Dead Letters");
+  var idRange = tracker.getRange(2, 1);
+  var nextId = idRange.getValue() + 1;
   Logger.log("Validating event sender");
   var validation = validateEvent(event, config);
   if (sender.matched) {
-    var idRange = tracker.getRange(2, 1);
-    var nextId = idRange.getValue() + 1;
     idRange.setValue(nextId);
     Logger.log(JSON.stringify(validation));
     if (validation.success) {
