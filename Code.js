@@ -21,5 +21,5 @@ function doPost(e) {
   Logger.log('Sender: ' + JSON.stringify(sender));
   processPost(e, sender, config);
   // Return a blank JSON object so the sender receives an ack back
-  return ContentService.createTextOutput('{"received": true}').setMimeType(ContentService.MimeType.JSON);
+  return ContentService.createTextOutput('{}').setMimeType(ContentService.MimeType.JSON);
 }
