@@ -1,3 +1,4 @@
 .eslintrc.js
 Config.js
 **.yml
+.js

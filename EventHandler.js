@@ -7,7 +7,12 @@ function parseSender(event, config) {
   try {
     var postData = {};
     if ('postData' in event) {
-      postData = JSON.parse(event.postData.contents);
+      if (event.postData.type === 'application/x-www-form-urlencoded' && 'payload' in event.parameter) {
+        postData = JSON.parse(event.parameter.payload)
+      }
+      else {
+        postData = JSON.parse(event.postData.contents);
+      }
     }
     if ('token' in postData && postData.token === config.GChat.verificationToken) {
       return {
@@ -16,7 +21,7 @@ function parseSender(event, config) {
         "sender": "GChat"
       };
     }
-    else if ('build_url' in postData && (/^https:\/\/travis-ci.org\/.*/).test(postData.build_url) && config.TravisCI.repos.includes(postData.repository.owner_name + '/' + postData.repository.name)) {
+    else if ('build_url' in postData && (/^https:\/\/travis-ci.org\/.*/).test(postData.build_url)) {
       return {
         "format": "raw",
         "matched": true,
@@ -28,6 +33,13 @@ function parseSender(event, config) {
         "format": "raw",
         "matched": true,
         "sender": "AppVeyor"
+      };
+    }
+    else if ('sender' in postData && 'url' in postData.sender && (/^https:\/\/api.github.com\/users.*/).test(postData.sender.url)) {
+      return {
+        "format": "raw",
+        "matched": true,
+        "sender": "GitHub"
       };
     }
     else if ('resource' in postData && (/^https:\/\/.*.visualstudio.com\/.*/).test(postData.resource.url) && config.VSTS.repos.includes(postData.eventData.repositoryName)) {
@@ -76,7 +88,13 @@ function parseSender(event, config) {
 function validateEvent(e, config) {
   if (typeof e !== 'undefined') {
     if ('postData' in e) {
-      var postData = JSON.parse(e.postData.contents);
+      var postData = {}
+      if (e.postData.type === 'application/x-www-form-urlencoded' && 'payload' in e.parameter) {
+        postData = JSON.parse(e.parameter.payload)
+      }
+      else {
+        postData = JSON.parse(e.postData.contents);
+      }
       var postToken = '';
       if ('token' in postData) {
         postToken = postData.token;
@@ -122,6 +140,13 @@ function processPost(event, sender, config) {
   var dlq = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Dead Letters");
   var idRange = tracker.getRange(2, 1);
   var nextId = idRange.getValue() + 1;
+  var postData = {}
+  if (event.postData.type === 'application/x-www-form-urlencoded' && 'payload' in event.parameter) {
+    postData = JSON.parse(event.parameter.payload)
+  }
+  else {
+    postData = JSON.parse(event.postData.contents);
+  }
   Logger.log("Validating event sender");
   var validation = validateEvent(event, config);
   if (sender.matched) {
@@ -129,23 +154,23 @@ function processPost(event, sender, config) {
     Logger.log(JSON.stringify(validation));
     if (validation.success) {
       Logger.log("Event validated! Adding event to Sheets MQ");
-      sheet.appendRow([nextId, JSON.stringify(JSON.parse(event.postData.contents)), "No", sender.sender]);
+      sheet.appendRow([nextId, JSON.stringify(postData), "No", sender.sender]);
       Logger.log('EVENT: ' + JSON.stringify(event));
     }
     else {
       Logger.log("Sender matched but event not validated! Adding full event to Dead Letters queue");
-      dlq.appendRow([(new Date()).toLocaleString(), nextId, JSON.stringify(event), JSON.stringify(JSON.parse(event.postData.contents)), sender.sender]);
+      dlq.appendRow([(new Date()).toLocaleString(), nextId, JSON.stringify(event), JSON.stringify(postData), sender.sender]);
       Logger.log('EVENT: ' + JSON.stringify(event));
     }
   }
   else if (validation.success) {
     Logger.log("Sender not matched but event was validated! Adding full event to Dead Letters queue for inspection");
-    dlq.appendRow([(new Date()).toLocaleString(), nextId, JSON.stringify(event), JSON.stringify(JSON.parse(event.postData.contents)), 'Unknown[Validated]']);
+    dlq.appendRow([(new Date()).toLocaleString(), nextId, JSON.stringify(event), JSON.stringify(postData), 'Unknown[Validated]']);
     Logger.log('EVENT: ' + JSON.stringify(event));
   }
   else {
     Logger.log("Sender not matched and event not validated! Adding full event to Dead Letters queue for inspection");
-    dlq.appendRow([(new Date()).toLocaleString(), nextId, JSON.stringify(event), JSON.stringify(JSON.parse(event.postData.contents)), 'Unknown[Not Validated]']);
+    dlq.appendRow([(new Date()).toLocaleString(), nextId, JSON.stringify(event), JSON.stringify(postData), 'Unknown[Not Validated]']);
     Logger.log('EVENT: ' + JSON.stringify(event));
   }
 }
