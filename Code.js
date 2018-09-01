@@ -1,3 +1,6 @@
+var ss = SpreadsheetApp.getActiveSpreadsheet();
+Logger = BetterLog.useSpreadsheet(ss.getId());
+
 var CONFIG = getConfig();
 if (typeof CONFIG.APIKey === 'undefined') {
   CONFIG.APIKey = null
@@ -23,8 +26,6 @@ Logger.log(CONFIG);
 /**
  * Get the current Sheet details and format Sheet as needed
  */
-Logger.log("Getting Spreadsheet");
-var ss = SpreadsheetApp.getActiveSpreadsheet();
 var sheet = ss.getSheetByName("Queue");
 if (!sheet) {
   Logger.log("Queue sheet not found! Creating...");
@@ -96,45 +97,13 @@ sheet.setTabColor("41f4d9");
 tracker.setTabColor("f4df41");
 dlq.setTabColor("ff0000");
 
-/**
- * Cleans up the Sheet and removes any Acked or empty rows
- */
-function cleanupSheet() {  
-  var toDelete = [];
-  var rows = sheet.getRange(1, 1, sheet.getMaxRows(), sheet.getMaxColumns()).getValues();
-  for (var c = 0; c < sheet.getMaxRows(); c++) {
-    Logger.log("Checking row: " + c);
-    if (rows[c][2] == "") {
-      Logger.log("Deleting EMPTY row: " + (c + 1));
-      toDelete.push(rows[c][0]);
-    }
-    else if (rows[c][2] == "Yes") {
-      Logger.log("Deleting ACKED row: " + (c + 1));
-      toDelete.push(rows[c][0]);
-    }
-  }
-  if (toDelete.length > 0) {
-    var deleteCount = 0;
-    rows = sheet.getRange(1, 1, sheet.getMaxRows(), sheet.getMaxColumns()).getValues();
-    for (var i = 0; i < sheet.getMaxRows(); i++) {
-      if (rows[i][0] != "Id") {
-        for (var d = 0; d < toDelete.length; d++) {
-          if (rows[i][0] == toDelete[d]) {
-            var rowToDelete = i + 1 - deleteCount;
-            Logger.log("Deleting row '" + rowToDelete + "'/ ID: " + toDelete[d]);
-            sheet.deleteRow(rowToDelete);
-            deleteCount += 1;
-            break;
-          }
-        }
-      }
-    }
-    Logger.log("Cleaned up " + deleteCount + " rows.");
-  }
-}
-
 function parseSender(event) {
-  var postData = JSON.parse(event.postData.contents);
+  if ('postData' in event) {
+    var postData = JSON.parse(event.postData.contents);
+  }
+  else {
+    postData = {};
+  }
   if ('token' in postData && postData.token === CONFIG.GChat.verificationToken) {
     return {
       "format": "raw",
@@ -194,19 +163,30 @@ function parseSender(event) {
  */
 function validateEvent(e) {
   if (typeof e !== 'undefined') {
-    var postData = JSON.parse(e.postData.contents);
-    var postToken = '';
-    if ('token' in postData) {
-      postToken = postData.token;
+    if ('postData' in e) {
+      var postData = JSON.parse(e.postData.contents);
+      var postToken = '';
+      if ('token' in postData) {
+        postToken = postData.token;
+      }
+      Logger.log(e);
+      if ('token' in postData && postToken === CONFIG.GChat.verificationToken) {
+        return {
+          "success": true,
+          "text": "Payload Token validated! Hi from Apps Script API!"
+        };
+      }
+      else if (e.parameter.token === CONFIG.APIKey || e.parameter.token === CONFIG.GChat.verificationToken || ('token' in postData && (postToken === CONFIG.APIKey || postToken === CONFIG.GChat.verificationToken))) {
+        return {
+          "success": true,
+          "text": "API Key validated! Hi from Apps Script API!"
+        };
+      }
+      else {
+        return { "success": false };
+      }
     }
-    Logger.log(e);
-    if ('token' in postData && postToken === CONFIG.GChat.verificationToken) {
-      return {
-        "success": true,
-        "text": "Payload Token validated! Hi from Apps Script API!"
-      };
-    }
-    else if (e.parameter.token === CONFIG.APIKey || e.parameter.token === CONFIG.GChat.verificationToken || ('token' in postData && (postToken === CONFIG.APIKey || postToken === CONFIG.GChat.verificationToken))) {
+    else if (e.parameter.token === CONFIG.APIKey || e.parameter.token === CONFIG.GChat.verificationToken) {
       return {
         "success": true,
         "text": "API Key validated! Hi from Apps Script API!"
@@ -218,51 +198,15 @@ function validateEvent(e) {
   }
 }
 
-/**
- * Validates the event.token and adds the event to the message queue
- *
- * @param {Object} event the event object from the API call
- * 
- * @param {String} sender the sender of the event returned from parseSender(e)
- */
-function processPost(event, sender) {
-  if (sender.matched) {
-    var idRange = tracker.getRange(2, 1);
-    var nextId = idRange.getValue() + 1;
-    idRange.setValue(nextId);
-    var validation = validateEvent(event);
-    Logger.log(validation);
-    if (validation.success && sender.matched) {
-      Logger.log("Adding event to Sheets MQ");
-      sheet.appendRow([nextId, JSON.stringify(JSON.parse(event.postData.contents)), "No", sender.sender]);
-      Logger.log(event);
-    }
-    else if (sender.matched && !validation.success) {
-      Logger.log("Sender matched but event not validated! Adding full event to Dead Letters queue");
-      dlq.appendRow([(new Date()).toLocaleString(), nextId, JSON.stringify(event), JSON.stringify(JSON.parse(event.postData.contents)), sender.sender]);
-      Logger.log(event);
-    }
-  }
-  else if (validation.success) {
-    Logger.log("Sender not matched but event was validated! Adding full event to Dead Letters queue for inspection");
-    dlq.appendRow([(new Date()).toLocaleString(), nextId, JSON.stringify(event), JSON.stringify(JSON.parse(event.postData.contents)), 'Unknown[Validated]']);
-    Logger.log(event);
-  }
-  else {
-    Logger.log("Sender not matched and event not validated! Adding full event to Dead Letters queue for inspection");
-    dlq.appendRow([(new Date()).toLocaleString(), nextId, JSON.stringify(event), JSON.stringify(JSON.parse(event.postData.contents)), 'Unknown[Not Validated]']);
-    Logger.log(event);
-  }
-  sheet.autoResizeColumns(1, 4);
-}
-
 function doGet(e) {
-  if (validateEvent(e)) {
-    var sender = parseSender(e);
-    Logger.log('Sender: ' + sender);
+  var validation = validateEvent(e);
+  var sender = parseSender(e);
+  Logger.log('Sender: ' + sender);
+  if (validation.success) {
+    return ContentService.createTextOutput('{"response": "Authentication succeeded!", "sender": ' + JSON.stringify(sender) + '}');
   }
   else {
-    return ContentService.createTextOutput('{"text": "The event is missing both a post token and API key!"}');
+    return ContentService.createTextOutput('{"error": "Authentication failed!"}');
   }
 }
 
@@ -271,38 +215,4 @@ function doPost(e) {
   processPost(e, sender);
   // Return a blank JSON object so the sender receives an ack back
   return ContentService.createTextOutput('{}');
-}
-
-function testPOST() {
-  var url = ScriptApp.getService().getUrl();
-  var options = {
-    "followRedirects": true,
-    "method": "POST",
-    "muteHttpExceptions": true,
-    "payload": JSON.stringify({
-      "blog": "ctrlq",
-      "name": "labnol",
-      "type": "post"
-    })
-  };
-  var result = UrlFetchApp.fetch(url, options);
-  if (result.getResponseCode() == 200) {
-    var final = JSON.parse(result.getContentText());
-    Logger.log(final);
-  }
-}
-
-function testGET() {
-  var queryString = "?greeting=Hola&name=Mundo";
-  var url = ScriptApp.getService().getUrl() + queryString;
-  Logger.log(url);
-  var options = {
-    "followRedirects": true,
-    "method": "GET",
-    "muteHttpExceptions": true
-  };
-  var result = UrlFetchApp.fetch(url, options);
-  if (result.getResponseCode() == 200) {
-    return result.getContentText();
-  }
 }
