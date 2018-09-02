@@ -73,9 +73,11 @@ function parseSender(event, config) {
     }
   }
   catch (e) {
-    e = (typeof e === 'string') ? new Error(e) : e;
-    Logger.severe('%s: %s (line %s, file "%s"). Stack: "%s" . While processing %s.',e.name || '', e.message || '', e.lineNumber || '', e.fileName || '', e.stack || '', '');
-    dlq.appendRow([(new Date()).toLocaleString(), nextId, JSON.stringify(event), event.postData.contents, 'Unknown[Not Validated]']);
+    var err = (typeof e === 'string')
+          ? new Error(e)
+          : e;
+    Logger.severe('%s: %s (line %s, file "%s"). Stack: "%s" . While processing %s.', err.name || '', err.message || '', err.lineNumber || '', err.fileName || '', err.stack || '', '');
+    dlq.appendRow([Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss:SSS Z'), nextId, JSON.stringify(event), event.postData.contents, 'Unknown[Not Validated]']);
     throw e;
   }
 }
@@ -159,18 +161,83 @@ function processPost(event, sender, config) {
     }
     else {
       Logger.log("Sender matched but event not validated! Adding full event to Dead Letters queue");
-      dlq.appendRow([(new Date()).toLocaleString(), nextId, JSON.stringify(event), JSON.stringify(postData), sender.sender]);
+      dlq.appendRow([Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss:SSS Z'), nextId, JSON.stringify(event), JSON.stringify(postData), sender.sender]);
       Logger.log('EVENT: ' + JSON.stringify(event));
     }
   }
   else if (validation.success) {
     Logger.log("Sender not matched but event was validated! Adding full event to Dead Letters queue for inspection");
-    dlq.appendRow([(new Date()).toLocaleString(), nextId, JSON.stringify(event), JSON.stringify(postData), 'Unknown[Validated]']);
+    dlq.appendRow([Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss:SSS Z'), nextId, JSON.stringify(event), JSON.stringify(postData), 'Unknown[Validated]']);
     Logger.log('EVENT: ' + JSON.stringify(event));
   }
   else {
     Logger.log("Sender not matched and event not validated! Adding full event to Dead Letters queue for inspection");
-    dlq.appendRow([(new Date()).toLocaleString(), nextId, JSON.stringify(event), JSON.stringify(postData), 'Unknown[Not Validated]']);
+    dlq.appendRow([Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss:SSS Z'), nextId, JSON.stringify(event), JSON.stringify(postData), 'Unknown[Not Validated]']);
     Logger.log('EVENT: ' + JSON.stringify(event));
+  }
+}
+
+/**
+ * Validates the event.token and adds the event to the message queue
+ *
+ * @param {Object} event the event object from the API call
+ * 
+ * @param {String} sender the sender of the event returned from parseSender(e)
+ */
+function processGet(event, config) {
+  Logger.log("Validating event sender");
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Queue");
+  var validation = validateEvent(event, config);
+  if (validation.success) {
+    var sourceType = (typeof event.parameter.source === 'undefined')
+                      ? 'GChat'
+                      : event.parameter.source;
+    var maxRows = (typeof event.parameter.maxRows === 'undefined')
+                      ? 1
+                      : event.parameter.maxRows;
+    Logger.log("GET request validated! Dequeueing MAX [" + maxRows + "] unacked row(s) for source type [" + sourceType + "]...");
+    if (sheet.getMaxRows() > 1) {
+      var eventsToReturn = [];
+      var matchCount = 0;
+      var rows = sheet.getRange(1, 1, sheet.getMaxRows(), sheet.getMaxColumns()).getValues();
+      var eventValue = null;
+      for (var c = 0; (c - matchCount) < sheet.getMaxRows(); c++) {
+        if (rows[c][3] === sourceType && rows[c][2] === 'No') {
+          Logger.log("Row [" + (c + 1) + "] / ID [" + rows[c][0] + "] matched! Pushing to eventsToReturn array");
+          eventValue = (event.parameter.format == 'json')
+                        ? JSON.parse(rows[c][1])
+                        : rows[c][1];
+          eventsToReturn.push({
+            "Acked": rows[c][2],
+            "Event": eventValue,
+            "Id": rows[c][0],
+            "Source": rows[c][3]
+          });
+          if (event.parameter.dequeue != 'no') {
+            Logger.log("Dequeueing Row [" + (c + 1) + "] / ID [" + rows[c][0] + "]");
+            sheet.deleteRow(c - matchCount + 1);
+          }
+          matchCount += 1;
+          if (matchCount >= maxRows) {
+            break;
+          }
+        }
+      }
+      if (eventsToReturn.length === 0) {
+        Logger.log("There are no events in the queue matching source [" + sourceType + "]!");
+      }
+      else {
+        Logger.log("Returning [" + eventsToReturn.length + "] events from the queue matching source [" + sourceType + "]!");
+      }
+      return eventsToReturn;
+    }
+    else {
+      Logger.log("There are no events in the queue!");
+      return {};
+    }
+  }
+  else {
+    Logger.log("GET request not validated! Adding to Dead Letters sheet for inspection");
+    SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Dead Letters").appendRow([Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss:SSS Z'), 'N/A', JSON.stringify(event), '{}', 'GET[Not Validated]']);
   }
 }

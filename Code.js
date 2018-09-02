@@ -1,17 +1,11 @@
 Logger = BetterLog.useSpreadsheet(SpreadsheetApp.getActiveSpreadsheet().getId());
+Logger.SHEET_MAX_ROWS = 700
+Logger.SHEET_LOG_CELL_WIDTH = 1600
 
 function doGet(e) {
   Logger.log('------------ NEW GET REQUEST ------------');
   var config = getConfig();
-  var validation = validateEvent(e, config);
-  var sender = parseSender(e, config);
-  Logger.log('Sender: ' + JSON.stringify(sender));
-  if (validation.success) {
-    return ContentService.createTextOutput('{"response": "Authentication succeeded!", "sender": ' + JSON.stringify(sender) + '}').setMimeType(ContentService.MimeType.JSON);
-  }
-  else {
-    return ContentService.createTextOutput('{"error": "Authentication failed!"}').setMimeType(ContentService.MimeType.JSON);
-  }
+  return ContentService.createTextOutput(JSON.stringify(processGet(e, config))).setMimeType(ContentService.MimeType.JSON);
 }
 
 function doPost(e) {
