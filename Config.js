@@ -33,6 +33,5 @@ function getConfig() {
       "webhooks": []
     }
   }
-  Logger.log('CONFIG: ' + JSON.stringify(CONF));
   return CONF;
 }

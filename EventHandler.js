@@ -1,5 +1,4 @@
 function parseSender(event, config) {
-  Logger.log("Parsing sender...");
   var tracker = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Tracker");
   var dlq = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Dead Letters");
   var idRange = tracker.getRange(2, 1);
@@ -50,7 +49,7 @@ function parseSender(event, config) {
       };
     }
     else if ('attachments' in postData && ('text' in postData.attachments[0] || 'text' in postData)) {
-      if ((/https:\/\/circleci.com\/.*/).test(postData.attachments[0].text) || (/https:\/\/circleci.com\/.*/).test(postData.text)) {
+      if ((/(https:\/\/circleci.com\/.*|^Hello from CircleCI$)/).test(postData.attachments[0].text) || (/https:\/\/circleci.com\/.*/).test(postData.text)) {
         return {
           "format": "slack",
           "matched": true,
@@ -78,7 +77,7 @@ function parseSender(event, config) {
           : e;
     Logger.severe('%s: %s (line %s, file "%s"). Stack: "%s" . While processing %s.', err.name || '', err.message || '', err.lineNumber || '', err.fileName || '', err.stack || '', '');
     dlq.appendRow([Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss:SSS Z'), nextId, JSON.stringify(event), event.postData.contents, 'Unknown[Not Validated]']);
-    throw e;
+    throw err;
   }
 }
 
@@ -88,6 +87,7 @@ function parseSender(event, config) {
  * @param {Object} e the event to validate 
  */
 function validateEvent(e, config) {
+  var validation = { "success": false };
   if (typeof e !== 'undefined') {
     if ('postData' in e) {
       var postData = {}
@@ -97,36 +97,32 @@ function validateEvent(e, config) {
       else {
         postData = JSON.parse(e.postData.contents);
       }
-      var postToken = '';
+      var postToken = null;
       if ('token' in postData) {
         postToken = postData.token;
       }
-      if ('token' in postData && postToken === config.GChat.verificationToken) {
-        return {
+      if (postToken !== null && postToken === config.GChat.verificationToken) {
+        validation = {
           "message": "POST Payload token validated!",
           "success": true
         };
       }
       else if (e.parameter.token === config.APIKey || e.parameter.token === config.GChat.verificationToken || ('token' in postData && (postToken === config.APIKey || postToken === config.GChat.verificationToken))) {
-        return {
+        validation = {
           "message": "POST token validated!",
           "success": true
         };
       }
-      else {
-        return { "success": false };
-      }
     }
     else if (e.parameter.token === config.APIKey || e.parameter.token === config.GChat.verificationToken) {
-      return {
+      validation = {
         "message": "GET Token validated!",
         "success": true
       };
     }
-    else {
-      return { "success": false };
-    }
   }
+  Logger.log('Event Validation: ' + JSON.stringify(validation));
+  return validation;
 }
 
 /**
@@ -149,31 +145,27 @@ function processPost(event, sender, config) {
   else {
     postData = JSON.parse(event.postData.contents);
   }
-  Logger.log("Validating event sender");
   var validation = validateEvent(event, config);
   if (sender.matched) {
     idRange.setValue(nextId);
-    Logger.log(JSON.stringify(validation));
     if (validation.success) {
       Logger.log("Event validated! Adding event to Sheets MQ");
       sheet.appendRow([nextId, JSON.stringify(postData), "No", sender.sender]);
-      Logger.log('EVENT: ' + JSON.stringify(event));
     }
     else {
       Logger.log("Sender matched but event not validated! Adding full event to Dead Letters queue");
       dlq.appendRow([Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss:SSS Z'), nextId, JSON.stringify(event), JSON.stringify(postData), sender.sender]);
-      Logger.log('EVENT: ' + JSON.stringify(event));
     }
   }
   else if (validation.success) {
     Logger.log("Sender not matched but event was validated! Adding full event to Dead Letters queue for inspection");
     dlq.appendRow([Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss:SSS Z'), nextId, JSON.stringify(event), JSON.stringify(postData), 'Unknown[Validated]']);
-    Logger.log('EVENT: ' + JSON.stringify(event));
   }
   else {
-    Logger.log("Sender not matched and event not validated! Adding full event to Dead Letters queue for inspection");
+    var err = new Error("POST request not validated! Adding to Dead Letters sheet for inspection")
+    Logger.severe('%s: %s (line %s, file "%s"). Stack: "%s" . While processing %s.', err.name || '', err.message || '', err.lineNumber || '', err.fileName || '', err.stack || '', '');
     dlq.appendRow([Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss:SSS Z'), nextId, JSON.stringify(event), JSON.stringify(postData), 'Unknown[Not Validated]']);
-    Logger.log('EVENT: ' + JSON.stringify(event));
+    throw err;
   }
 }
 
@@ -185,36 +177,36 @@ function processPost(event, sender, config) {
  * @param {String} sender the sender of the event returned from parseSender(e)
  */
 function processGet(event, config) {
-  Logger.log("Validating event sender");
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Queue");
   var validation = validateEvent(event, config);
+  var curMaxRows = sheet.getMaxRows();
   if (validation.success) {
-    var sourceType = (typeof event.parameter.source === 'undefined')
-                      ? 'GChat'
-                      : event.parameter.source;
+    var sourceType = (typeof event.parameters.source === 'undefined')
+                      ? ['GChat']
+                      : event.parameters.source;
     var maxRows = (typeof event.parameter.maxRows === 'undefined')
                       ? 1
                       : event.parameter.maxRows;
-    Logger.log("GET request validated! Dequeueing MAX [" + maxRows + "] unacked row(s) for source type [" + sourceType + "]...");
-    if (sheet.getMaxRows() > 1) {
+    Logger.log("GET request validated! Dequeueing up to [" + maxRows + "] unacked row(s) for source type(s) [" + sourceType.toString() + "]");
+    if (curMaxRows > 1) {
       var eventsToReturn = [];
       var matchCount = 0;
-      var rows = sheet.getRange(1, 1, sheet.getMaxRows(), sheet.getMaxColumns()).getValues();
+      var rows = sheet.getRange(1, 1, curMaxRows, sheet.getMaxColumns()).getValues();
       var eventValue = null;
-      for (var c = 0; (c - matchCount) < sheet.getMaxRows(); c++) {
-        if (rows[c][3] === sourceType && rows[c][2] === 'No') {
-          Logger.log("Row [" + (c + 1) + "] / ID [" + rows[c][0] + "] matched! Pushing to eventsToReturn array");
-          eventValue = (event.parameter.format == 'json')
-                        ? JSON.parse(rows[c][1])
-                        : rows[c][1];
-          eventsToReturn.push({
-            "Acked": rows[c][2],
-            "Event": eventValue,
-            "Id": rows[c][0],
-            "Source": rows[c][3]
-          });
+      for (var c = 0; c < curMaxRows; c++) {
+        if (sourceType.indexOf(rows[c][3]) > -1) {
+          if (rows[c][2] === 'No') {
+            eventValue = (event.parameter.format == 'json')
+                          ? JSON.parse(rows[c][1])
+                          : rows[c][1];
+            eventsToReturn.push({
+              "Acked": rows[c][2],
+              "Event": eventValue,
+              "Id": rows[c][0],
+              "Source": rows[c][3]
+            });
+          }
           if (event.parameter.dequeue != 'no') {
-            Logger.log("Dequeueing Row [" + (c + 1) + "] / ID [" + rows[c][0] + "]");
             sheet.deleteRow(c - matchCount + 1);
           }
           matchCount += 1;
@@ -223,21 +215,19 @@ function processGet(event, config) {
           }
         }
       }
-      if (eventsToReturn.length === 0) {
-        Logger.log("There are no events in the queue matching source [" + sourceType + "]!");
-      }
-      else {
-        Logger.log("Returning [" + eventsToReturn.length + "] events from the queue matching source [" + sourceType + "]!");
-      }
-      return eventsToReturn;
+    }
+    Logger.log("Returning [" + eventsToReturn.length + "] events from the queue matching source type(s) [" + sourceType.toString() + "]!");
+    if (eventsToReturn.length === 0) {
+      return {};
     }
     else {
-      Logger.log("There are no events in the queue!");
-      return {};
+      return eventsToReturn;
     }
   }
   else {
-    Logger.log("GET request not validated! Adding to Dead Letters sheet for inspection");
+    var err = new Error("GET request not validated! Adding to Dead Letters sheet for inspection")
+    Logger.severe('%s: %s (line %s, file "%s"). Stack: "%s" . While processing %s.', err.name || '', err.message || '', err.lineNumber || '', err.fileName || '', err.stack || '', '');
     SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Dead Letters").appendRow([Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss:SSS Z'), 'N/A', JSON.stringify(event), '{}', 'GET[Not Validated]']);
+    throw err;
   }
 }
