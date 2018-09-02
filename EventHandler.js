@@ -5,6 +5,7 @@ function parseSender(event, config) {
   var nextId = idRange.getValue() + 1;
   try {
     var postData = {};
+    var sender = { "matched": false };
     if ('postData' in event) {
       if (event.postData.type === 'application/x-www-form-urlencoded' && 'payload' in event.parameter) {
         postData = JSON.parse(event.parameter.payload)
@@ -14,62 +15,57 @@ function parseSender(event, config) {
       }
     }
     if ('token' in postData && postData.token === config.GChat.verificationToken) {
-      return {
+      sender = {
         "format": "raw",
         "matched": true,
         "sender": "GChat"
       };
     }
     else if ('build_url' in postData && (/^https:\/\/travis-ci.org\/.*/).test(postData.build_url)) {
-      return {
+      sender = {
         "format": "raw",
         "matched": true,
         "sender": "TravisCI"
       };
     }
     else if ('eventData' in postData && 'buildUrl' in postData.eventData && (/^https:\/\/ci.appveyor.com\/.*/).test(postData.eventData.buildUrl)) {
-      return {
+      sender = {
         "format": "raw",
         "matched": true,
         "sender": "AppVeyor"
       };
     }
     else if ('sender' in postData && 'url' in postData.sender && (/^https:\/\/api.github.com\/users.*/).test(postData.sender.url)) {
-      return {
+      sender = {
         "format": "raw",
         "matched": true,
         "sender": "GitHub"
       };
     }
     else if ('resource' in postData && (/^https:\/\/.*.visualstudio.com\/.*/).test(postData.resource.url) && config.VSTS.repos.includes(postData.eventData.repositoryName)) {
-      return {
+      sender = {
         "format": "raw",
         "matched": true,
         "sender": "VSTS"
       };
     }
     else if ('attachments' in postData && ('text' in postData.attachments[0] || 'text' in postData)) {
-      if ((/(https:\/\/circleci.com\/.*|^Hello from CircleCI$)/).test(postData.attachments[0].text) || (/https:\/\/circleci.com\/.*/).test(postData.text)) {
-        return {
+      if ((/(https:\/\/circleci.com\/.*|^Hello from CircleCI$)/).test(postData.attachments[0].text)) {
+        sender = {
           "format": "slack",
           "matched": true,
           "sender": "CircleCI"
         };
       }
       else if ((/https:\/\/ci.appveyor.com\/.*/).test(postData.attachments[0].text)) {
-        return {
+        sender = {
           "format": "slack",
           "matched": true,
           "sender": "AppVeyor"
         };
       }
-      else {
-        return { "matched": false };
-      }
     }
-    else {
-      return { "matched": false };
-    }
+    return sender;
   }
   catch (e) {
     var err = (typeof e === 'string')
