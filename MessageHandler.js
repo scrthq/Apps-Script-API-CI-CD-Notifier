@@ -101,7 +101,7 @@ function parseMessage(postData, sender, config) {
               parsed.messageHtml = postData.pusher.name + ' has pushed to GitHub repo <a href="' + postData.repository.html_url + '">' + postData.repository.full_name + '</a><br><a href="' + postData.compare + '">Compare</a>'
               parsed.color = '#1bcee2'
             }
-            else if ('description' in postData && (postData.description.indexOf('build') > -1 || postData.description.indexOf('running') > -1)) {
+            else if ('description' in postData && (postData.description.indexOf('build') > -1 || postData.description.indexOf('running') > -1 || postData.description.indexOf('tests') > -1)) {
               parsed.message = "GitHub Build Update: <" + postData.target_url + "|" + postData.description + "> for repo <" + postData.repository.html_url + "|" + postData.repository.full_name + ">\nContext: _" + postData.context + "_"
               parsed.messageHtml = 'GitHub Build Update: <a href="' + postData.target_url + '">' + postData.description + '</a> for repo <a href="' + postData.repository.html_url + '">' + postData.repository.full_name + "</a><br>Context: <i>" + postData.context + "</i>"
               parsed.color = (postData.description.indexOf('passed') > -1 || postData.description.indexOf('succeeded') > -1)
