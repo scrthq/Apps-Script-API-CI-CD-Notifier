@@ -140,11 +140,21 @@ function processPost(event, sender, config) {
   var sendConf = config[sender.sender];
   if (validation.success) {
     var postData = {}
-    if (event.postData.type === 'application/x-www-form-urlencoded' && 'payload' in event.parameter) {
-      postData = JSON.parse(event.parameter.payload)
+    try {
+      if (event.postData.type === 'application/x-www-form-urlencoded' && 'payload' in event.parameter) {
+        postData = JSON.parse(event.parameter.payload)
+      }
+      else {
+        postData = JSON.parse(event.postData.contents);
+      }
     }
-    else {
-      postData = JSON.parse(event.postData.contents);
+    catch (e) {
+      err = (typeof e === 'string')
+            ? new Error(e)
+            : e;
+      Logger.severe('%s: %s (line %s, file "%s"). Stack: "%s" . While processing %s.', err.name || '', err.message || '', err.lineNumber || '', err.fileName || '', err.stack || '', '');
+      dlq.appendRow([Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss:SSS Z'), nextId, JSON.stringify(event), JSON.stringify(postData), JSON.stringify(sender)]);
+      throw err
     }
     if (sendConf.addToQueue) {
       var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Queue");
@@ -210,7 +220,7 @@ function processPost(event, sender, config) {
     }
   }
   else {
-    var err = new Error("POST request not validated! Adding to Dead Letters sheet for inspection")
+    err = new Error("POST request not validated! Adding to Dead Letters sheet for inspection")
     Logger.severe('%s: %s (line %s, file "%s"). Stack: "%s" . While processing %s.', err.name || '', err.message || '', err.lineNumber || '', err.fileName || '', err.stack || '', '');
     dlq.appendRow([Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss:SSS Z'), nextId, JSON.stringify(event), JSON.stringify(postData), 'Unknown[Not Validated]']);
   }
