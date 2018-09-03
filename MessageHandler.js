@@ -26,12 +26,7 @@ function sendSlackMsg(message, webhook, username, iconUrl, channel, color, exist
 }
 
 function sendGChatMsg(message, webhook, username, iconUrl) {
-  var payload = {
-    "fallbackText": message,
-    "text": message
-  };
-  
-  /*
+  var payload = { "text": message };
   if (typeof username !== 'undefined') {
     payload.cards = [{ "header": { "title": username } }];
     if (typeof iconUrl !== 'undefined') {
@@ -39,7 +34,6 @@ function sendGChatMsg(message, webhook, username, iconUrl) {
       payload.cards[0].header.imageStyle = 'IMAGE';
     }
   }
-  */
   var options = {
     'method': 'post',
     'payload': JSON.stringify(payload)
@@ -60,7 +54,7 @@ function parseMessage(postData, sender, config) {
     case 'raw':
       switch (sender.sender) {
         case 'AppVeyor':
-          parsed.username = 'AppVeyor CI'
+          parsed.username = 'AppVeyor CI (GAS)'
           parsed.iconUrl = config.AppVeyor.icon || 'https://ci.appveyor.com/assets/images/appveyor-blue-144.png'
           parsed.color = (postData.eventName.indexOf('success') > -1)
                           ? '#41aa58'
@@ -68,7 +62,7 @@ function parseMessage(postData, sender, config) {
           parsed.message = "<" + postData.eventData.buildUrl + "|[" + postData.eventData.projectName + "] Build " + postData.eventData.buildVersion + " " + postData.eventData.status + ">\r\nCommit <" + postData.eventData.commitUrl + "|" + postData.eventData.commitId + "> by " + postData.eventData.commitAuthor + " on " + postData.eventData.commitDate + ": _" + postData.eventData.commitMessage + "_"
           break;
         case 'GitHub':
-          parsed.username = 'GitHub'
+          parsed.username = 'GitHub (GAS)'
           parsed.iconUrl = config.GitHub.icon || 'https://static.brandfolder.com/circleci/logo/circleci-primary-logo.png'
           if ('pusher' in postData) {
             parsed.message = postData.pusher.name + " has pushed to GitHub repo <" + postData.repository.html_url + "|" + postData.repository.full_name + ">\n<" + postData.compare + "|Compare>"
@@ -84,12 +78,12 @@ function parseMessage(postData, sender, config) {
           }
           break;
         case 'TravisCI':
-          parsed.username = 'TravisCI'
+          parsed.username = 'TravisCI (GAS)'
           parsed.iconUrl = config.TravisCI.icon || 'https://www.ocadotechnology.com/wp-content/uploads/2018/02/TravisCI-Mascot-1.png'
           parsed.color = (postData.result_message === 'Passed')
                           ? '#41aa58'
                           : '#ffff00'
-          parsed.message = "<" + postData.build_url + "|TravisCI Build" + postData.number + "> status for repo <" + postData.compare_url + "|" + postData.repository.name + ">: *" + postData.status_message + "*"
+          parsed.message = "[<" + postData.compare_url + "|" + postData.repository.name + ">] <" + postData.build_url + "|TravisCI Build " + postData.number + "> status: *" + postData.status_message + "*"
           break;
         case 'VSTS':
           break;
