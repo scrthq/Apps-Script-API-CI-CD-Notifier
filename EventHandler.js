@@ -172,9 +172,11 @@ function processPost(event, sender, config) {
             try {
               if (sender.format === 'slack') {
                 sendSlackMsg(parsed.message, sendConf.destinations.Slack[i].webhook, parsed.username, parsed.iconUrl, sendConf.destinations.Slack[i].channel || parsed.channel, parsed.color, postData);
+                Logger.log("Slack message sent with original postData!");
               }
               else {
                 sendSlackMsg(parsed.message, sendConf.destinations.Slack[i].webhook, parsed.username, parsed.iconUrl, parsed.channel, parsed.color);
+                Logger.log("Slack message sent with parsed postData!");
               }
             }
             catch (e) {
@@ -190,6 +192,7 @@ function processPost(event, sender, config) {
           for (i = 0; i < sendConf.destinations.GChat.length; i++) {
             try {
               sendGChatMsg(parsed.message, sendConf.destinations.GChat[i], parsed.username, parsed.iconUrl);
+              Logger.log("Google Chat message sent with parsed postData!");
             }
             catch (e) {
               var err = (typeof e === 'string')

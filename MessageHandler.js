@@ -27,8 +27,6 @@ function sendSlackMsg(message, webhook, username, iconUrl, channel, color, exist
 
 function sendGChatMsg(message, webhook, username, iconUrl) {
   var payload = { "text": message };
-  
-  /*
   if (typeof username !== 'undefined') {
     payload.cards = [{ "header": { "title": username } }];
     if (typeof iconUrl !== 'undefined') {
@@ -36,7 +34,6 @@ function sendGChatMsg(message, webhook, username, iconUrl) {
       payload.cards[0].header.imageStyle = 'IMAGE';
     }
   }
-  */
   var options = {
     'contentType': 'application/json',
     'method': 'post',
