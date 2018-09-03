@@ -49,7 +49,7 @@ function parseSender(event, config) {
         "sender": "VSTS"
       };
     }
-    else if ('attachments' in postData && ('text' in postData.attachments[0] || 'text' in postData)) {
+    else if (('attachments' in postData && 'text' in postData.attachments[0]) || ('text' in postData && 'channel' in postData)) {
       if ((/(https:\/\/circleci.com\/.*|^Hello from CircleCI$)/).test(postData.attachments[0].text)) {
         sender = {
           "format": "slack",
@@ -62,6 +62,13 @@ function parseSender(event, config) {
           "format": "slack",
           "matched": true,
           "sender": "AppVeyor"
+        };
+      }
+      else if (config.Unknown.passThru === true) {
+        sender = {
+          "format": "slack",
+          "matched": true,
+          "sender": "Unknown"
         };
       }
     }
@@ -129,39 +136,80 @@ function validateEvent(e, config) {
  * @param {String} sender the sender of the event returned from parseSender(e)
  */
 function processPost(event, sender, config) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Queue");
-  var tracker = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Tracker");
-  var dlq = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Dead Letters");
-  var idRange = tracker.getRange(2, 1);
-  var nextId = idRange.getValue() + 1;
-  var postData = {}
-  if (event.postData.type === 'application/x-www-form-urlencoded' && 'payload' in event.parameter) {
-    postData = JSON.parse(event.parameter.payload)
-  }
-  else {
-    postData = JSON.parse(event.postData.contents);
-  }
   var validation = validateEvent(event, config);
-  if (sender.matched) {
-    idRange.setValue(nextId);
-    if (validation.success) {
-      Logger.log("Event validated! Adding event to Sheets MQ");
-      sheet.appendRow([nextId, JSON.stringify(postData), "No", sender.sender]);
+  var sendConf = config[sender.sender];
+  if (validation.success) {
+    var postData = {}
+    if (event.postData.type === 'application/x-www-form-urlencoded' && 'payload' in event.parameter) {
+      postData = JSON.parse(event.parameter.payload)
     }
     else {
-      Logger.log("Sender matched but event not validated! Adding full event to Dead Letters queue");
-      dlq.appendRow([Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss:SSS Z'), nextId, JSON.stringify(event), JSON.stringify(postData), sender.sender]);
+      postData = JSON.parse(event.postData.contents);
     }
-  }
-  else if (validation.success) {
-    Logger.log("Sender not matched but event was validated! Adding full event to Dead Letters queue for inspection");
-    dlq.appendRow([Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss:SSS Z'), nextId, JSON.stringify(event), JSON.stringify(postData), 'Unknown[Validated]']);
+    if (sendConf.addToQueue) {
+      var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Queue");
+      var tracker = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Tracker");
+      var dlq = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Dead Letters");
+      var idRange = tracker.getRange(2, 1);
+      var nextId = idRange.getValue() + 1;
+      idRange.setValue(nextId);
+      if (sender.matched) {
+        Logger.log("Event validated! Adding event to Sheets MQ");
+        sheet.appendRow([nextId, JSON.stringify(postData), "No", sender.sender]);
+      }
+      else {
+        Logger.log("Sender not matched but event was validated! Adding full event to Dead Letters queue for inspection");
+        dlq.appendRow([Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss:SSS Z'), nextId, JSON.stringify(event), JSON.stringify(postData), 'Unknown[Validated]']);
+      }
+    }
+    else if (sender.matched) {
+      if ('destinations' in sendConf) {
+        Logger.log("Fanning out message from sender [" + sender.sender + "] to webhook recipients");
+        var parsed = parseMessage(postData, sender, config);
+        var i = 0;
+        if ('GChat' in sendConf.destinations) {
+          for (i = 0; i < sendConf.destinations.GChat.length; i++) {
+            try {
+              sendGChatMsg(parsed.message, sendConf.destinations.GChat[i], parsed.username, parsed.iconUrl);
+            }
+            catch (e) {
+              var err = (typeof e === 'string')
+                    ? new Error(e)
+                    : e;
+              Logger.severe('%s: %s (line %s, file "%s"). Stack: "%s" . While processing %s.', err.name || '', err.message || '', err.lineNumber || '', err.fileName || '', err.stack || '', '');
+              dlq.appendRow([Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss:SSS Z'), nextId, JSON.stringify(event), JSON.stringify(parsed), JSON.stringify(sender)]);
+            }
+          }
+        }
+        if ('Slack' in sendConf.destinations) {
+          for (i = 0; i < sendConf.destinations.Slack.length; i++) {
+            try {
+              if (sender.format === 'slack') {
+                sendSlackMsg(parsed.message, sendConf.destinations.Slack[i].webhook, parsed.username, parsed.iconUrl, sendConf.destinations.Slack[i].channel || parsed.channel, parsed.color, postData);
+              }
+              else {
+                sendSlackMsg(parsed.message, sendConf.destinations.Slack[i].webhook, parsed.username, parsed.iconUrl, parsed.channel, parsed.color);
+              }
+            }
+            catch (e) {
+              err = (typeof e === 'string')
+                    ? new Error(e)
+                    : e;
+              Logger.severe('%s: %s (line %s, file "%s"). Stack: "%s" . While processing %s.', err.name || '', err.message || '', err.lineNumber || '', err.fileName || '', err.stack || '', '');
+              dlq.appendRow([Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss:SSS Z'), nextId, JSON.stringify(event), JSON.stringify(parsed), JSON.stringify(sender)]);
+            }
+          }
+        }
+      }
+      else {
+        Logger.log("Sender [" + sender.sender + "] does not have the destinations property set on the config! Skipping.")
+      }
+    }
   }
   else {
     var err = new Error("POST request not validated! Adding to Dead Letters sheet for inspection")
     Logger.severe('%s: %s (line %s, file "%s"). Stack: "%s" . While processing %s.', err.name || '', err.message || '', err.lineNumber || '', err.fileName || '', err.stack || '', '');
     dlq.appendRow([Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss:SSS Z'), nextId, JSON.stringify(event), JSON.stringify(postData), 'Unknown[Not Validated]']);
-    throw err;
   }
 }
 

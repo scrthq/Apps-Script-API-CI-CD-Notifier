@@ -34,7 +34,7 @@ module.exports = {
         "comma-dangle": "error",
         "comma-spacing": "off",
         "comma-style": "error",
-        "complexity": "error",
+        "complexity": "off",
         "computed-property-spacing": [
             "error",
             "never"
@@ -245,7 +245,7 @@ module.exports = {
             "last"
         ],
         "sort-imports": "error",
-        "sort-keys": "error",
+        "sort-keys": "off",
         "sort-vars": "error",
         "space-before-blocks": "error",
         "space-before-function-paren": "off",
