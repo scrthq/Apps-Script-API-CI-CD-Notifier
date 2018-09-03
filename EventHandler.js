@@ -201,7 +201,7 @@ function processPost(event, sender, config) {
         if ('GChat' in sendConf.destinations) {
           for (i = 0; i < sendConf.destinations.GChat.length; i++) {
             try {
-              sendGChatMsg(parsed.message, sendConf.destinations.GChat[i], sendConf.includeUserCard || false, parsed.username, parsed.iconUrl);
+              sendGChatMsg(parsed.message, sendConf.destinations.GChat[i], true, parsed.messageHtml, parsed.username, parsed.iconUrl);
               Logger.log("Google Chat message sent for sender [" + sender.sender + "] with parsed postData!");
             }
             catch (e) {
