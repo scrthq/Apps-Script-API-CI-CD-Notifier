@@ -25,9 +25,9 @@ function sendSlackMsg(message, webhook, username, iconUrl, channel, color, exist
   return UrlFetchApp.fetch(webhook, options);
 }
 
-function sendGChatMsg(message, webhook, username, iconUrl) {
+function sendGChatMsg(message, webhook, includeUserCard, username, iconUrl) {
   var payload = { "text": message };
-  if (typeof username !== 'undefined') {
+  if (typeof username !== 'undefined' && includeUserCard) {
     payload.cards = [{ "header": { "title": username } }];
     if (typeof iconUrl !== 'undefined') {
       payload.cards[0].header.imageUrl = iconUrl;
@@ -93,11 +93,17 @@ function parseMessage(postData, sender, config) {
       }
       break;
     case 'slack':
+      if (sender.sender === 'CircleCI') {
+        parsed.username = 'CircleCI (GAS)'
+        parsed.iconUrl = config.CircleCI.icon || 'https://static.brandfolder.com/circleci/logo/circleci-primary-logo.png'
+      }
+      else {
+        parsed.username = postData.username || null;
+        parsed.iconUrl = postData.icon_url || null;
+      }
       parsed.channel = postData.channel || null;
       parsed.color = postData.attachments[0].color || null;
-      parsed.iconUrl = postData.icon_url || null;
       parsed.message = postData.attachments[0].text || null;
-      parsed.username = postData.username || null;
       parsed.payload = postData;
       break;
     default:
