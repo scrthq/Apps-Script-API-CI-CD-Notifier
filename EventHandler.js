@@ -136,6 +136,9 @@ function validateEvent(e, config) {
  * @param {String} sender the sender of the event returned from parseSender(e)
  */
 function processPost(event, sender, config) {
+  if (sender.sender === 'GitHub') {
+    SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Dead Letters").appendRow([Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss:SSS Z'), 'N/A', JSON.stringify(event), event.parameter.payload, 'GitHub[processPost]']);
+  }
   var validation = validateEvent(event, config);
   var sendConf = config[sender.sender];
   if (validation.success) {

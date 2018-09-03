@@ -40,18 +40,23 @@ function sendSlackMsg(message, webhook, username, iconUrl, channel, color, exist
 
 function sendGChatMsg(message, webhook, includeUserCard, messageHtml, username, iconUrl) {
   var payload = { "fallbackText": message };
-  if (typeof username !== 'undefined' && includeUserCard === true) {
-    payload.cards = [{ "header": { "title": username } }];
-    if (typeof iconUrl !== 'undefined') {
-      payload.cards[0].header.imageUrl = iconUrl;
-      payload.cards[0].header.imageStyle = 'IMAGE';
+  if (includeUserCard === true) {
+    if (typeof username !== 'undefined') {
+      payload.cards = [{ "header": { "title": username } }];
+      if (typeof iconUrl !== 'undefined') {
+        payload.cards[0].header.imageUrl = iconUrl;
+        payload.cards[0].header.imageStyle = 'IMAGE';
+      }
     }
-  }
-  if (typeof messageHtml !== 'undefined' && messageHtml !== null) {
-    if (!('cards' in payload)) {
-      payload.cards = [{}];
+    if (typeof messageHtml !== 'undefined' && messageHtml !== null) {
+      if (!('cards' in payload)) {
+        payload.cards = [{}];
+      }
+      payload.cards[0].sections = [{ "widgets": [{ "textParagraph": { "text": messageHtml } }] }]
     }
-    payload.cards[0].sections = [{ "widgets": [{ "textParagraph": { "text": messageHtml } }] }]
+    else {
+      payload.text = message
+    }
   }
   else {
     payload.text = message
@@ -86,24 +91,24 @@ function parseMessage(postData, sender, config) {
                             ? '#41aa58'
                             : '#ffff00'
             parsed.message = "<" + postData.eventData.buildUrl + "|[" + postData.eventData.projectName + "] AppVeyor Build " + postData.eventData.buildVersion + " " + postData.eventData.status + ">\r\nCommit <" + postData.eventData.commitUrl + "|" + postData.eventData.commitId + "> by " + postData.eventData.commitAuthor + " on " + postData.eventData.commitDate + ": _" + postData.eventData.commitMessage + "_"
-            parsed.messageHtml = '<a href="' + postData.eventData.buildUrl + '">[' + postData.eventData.projectName + '] AppVeyor Build ' + postData.eventData.buildVersion + ' ' + postData.eventData.status + '</a></br>Commit <a href="' + postData.eventData.commitUrl + '">' + postData.eventData.commitId + '</a> by ' + postData.eventData.commitAuthor + ' on ' + postData.eventData.commitDate + ': <i>' + postData.eventData.commitMessage + '</i>'
+            parsed.messageHtml = '<a href="' + postData.eventData.buildUrl + '">[' + postData.eventData.projectName + ']</br></br>AppVeyor Build ' + postData.eventData.buildVersion + ' ' + postData.eventData.status + '</a></br></br>Commit <a href="' + postData.eventData.commitUrl + '">' + postData.eventData.commitId + '</a> by ' + postData.eventData.commitAuthor + ' on ' + postData.eventData.commitDate + ': <i>' + postData.eventData.commitMessage + '</i>'
             break;
           case 'GitHub':
             parsed.username = 'GitHub (GAS)'
             parsed.iconUrl = config.GitHub.icon || 'https://static.brandfolder.com/circleci/logo/circleci-primary-logo.png'
             if ('pusher' in postData) {
               parsed.message = postData.pusher.name + " has pushed to GitHub repo <" + postData.repository.html_url + "|" + postData.repository.full_name + ">\n<" + postData.compare + "|Compare>"
-              parsed.messageHtml = postData.pusher.name + ' has pushed to GitHub repo <a href="' + postData.repository.html_url + '">' + postData.repository.full_name + '</a></br><a href="' + postData.compare + '">Compare</a>'
+              parsed.messageHtml = postData.pusher.name + ' has pushed to GitHub repo <a href="' + postData.repository.html_url + '">' + postData.repository.full_name + '</a></br></br><a href="' + postData.compare + '">Compare</a>'
               parsed.color = '#1bcee2'
             }
             else if ('description' in postData && postData.description.indexOf('build') > -1) {
               parsed.message = "GitHub Build Update: <" + postData.target_url + "|" + postData.description + "> for repo <" + postData.repository.html_url + "|" + postData.repository.full_name + ">\nContext: _" + postData.context + "_"
-              parsed.messageHtml = 'GitHub Build Update: <a href="' + postData.target_url + '">' + postData.description + '</a> for repo <a href="' + postData.repository.html_url + '">' + postData.repository.full_name + "</a></br>Context: <i>" + postData.context + "</i>"
+              parsed.messageHtml = 'GitHub Build Update: <a href="' + postData.target_url + '">' + postData.description + '</a> for repo <a href="' + postData.repository.html_url + '">' + postData.repository.full_name + "</a></br></br>Context: <i>" + postData.context + "</i>"
               parsed.color = '#ff8040'
             }
             else {
               parsed.message = "GitHub Repo Update: <" + postData.target_url + "|" + postData.description + "> for repo <" + postData.repository.html_url + "|" + postData.repository.full_name + ">\nContext: _" + postData.context + "_"
-              parsed.messageHtml = 'GitHub Repo Update: <a href="' + postData.target_url + '">' + postData.description + '</a> for repo <a href="' + postData.repository.html_url + '">' + postData.repository.full_name + "</a></br>Context: <i>" + postData.context + "</i>"
+              parsed.messageHtml = 'GitHub Repo Update: <a href="' + postData.target_url + '">' + postData.description + '</a> for repo <a href="' + postData.repository.html_url + '">' + postData.repository.full_name + "</a></br></br>Context: <i>" + postData.context + "</i>"
               parsed.color = '#959595'
             }
             break;
@@ -114,7 +119,7 @@ function parseMessage(postData, sender, config) {
                             ? '#41aa58'
                             : '#ffff00'
             parsed.message = "[<" + postData.compare_url + "|" + postData.repository.name + ">] <" + postData.build_url + "|TravisCI Build " + postData.number + "> status: *" + postData.status_message + "*"
-            parsed.messageHtml = '[<a href="' + postData.compare_url + '">' + postData.repository.name + '</a>] <a href="' + postData.build_url + '">TravisCI Build ' + postData.number + "</a> status: <b>" + postData.status_message + "</b>"
+            parsed.messageHtml = '[<a href="' + postData.compare_url + '">' + postData.repository.name + '</a>]</br></br><a href="' + postData.build_url + '">TravisCI Build ' + postData.number + "</a> status: <b>" + postData.status_message + "</b>"
             break;
           case 'VSTS':
             break;
