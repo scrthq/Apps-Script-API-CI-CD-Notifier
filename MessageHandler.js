@@ -30,6 +30,8 @@ function sendGChatMsg(message, webhook, username, iconUrl) {
     "fallbackText": message,
     "text": message
   };
+  
+  /*
   if (typeof username !== 'undefined') {
     payload.cards = [{ "header": { "title": username } }];
     if (typeof iconUrl !== 'undefined') {
@@ -37,6 +39,7 @@ function sendGChatMsg(message, webhook, username, iconUrl) {
       payload.cards[0].header.imageStyle = 'IMAGE';
     }
   }
+  */
   var options = {
     'method': 'post',
     'payload': JSON.stringify(payload)

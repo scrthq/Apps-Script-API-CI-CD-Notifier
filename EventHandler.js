@@ -167,20 +167,6 @@ function processPost(event, sender, config) {
         Logger.log("Fanning out message from sender [" + sender.sender + "] to webhook recipients");
         var parsed = parseMessage(postData, sender, config);
         var i = 0;
-        if ('GChat' in sendConf.destinations) {
-          for (i = 0; i < sendConf.destinations.GChat.length; i++) {
-            try {
-              sendGChatMsg(parsed.message, sendConf.destinations.GChat[i], parsed.username, parsed.iconUrl);
-            }
-            catch (e) {
-              var err = (typeof e === 'string')
-                    ? new Error(e)
-                    : e;
-              Logger.severe('%s: %s (line %s, file "%s"). Stack: "%s" . While processing %s.', err.name || '', err.message || '', err.lineNumber || '', err.fileName || '', err.stack || '', '');
-              dlq.appendRow([Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss:SSS Z'), nextId, JSON.stringify(event), JSON.stringify(parsed), JSON.stringify(sender)]);
-            }
-          }
-        }
         if ('Slack' in sendConf.destinations) {
           for (i = 0; i < sendConf.destinations.Slack.length; i++) {
             try {
@@ -193,6 +179,20 @@ function processPost(event, sender, config) {
             }
             catch (e) {
               err = (typeof e === 'string')
+                    ? new Error(e)
+                    : e;
+              Logger.severe('%s: %s (line %s, file "%s"). Stack: "%s" . While processing %s.', err.name || '', err.message || '', err.lineNumber || '', err.fileName || '', err.stack || '', '');
+              dlq.appendRow([Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss:SSS Z'), nextId, JSON.stringify(event), JSON.stringify(parsed), JSON.stringify(sender)]);
+            }
+          }
+        }
+        if ('GChat' in sendConf.destinations) {
+          for (i = 0; i < sendConf.destinations.GChat.length; i++) {
+            try {
+              sendGChatMsg(parsed.message, sendConf.destinations.GChat[i], parsed.username, parsed.iconUrl);
+            }
+            catch (e) {
+              var err = (typeof e === 'string')
                     ? new Error(e)
                     : e;
               Logger.severe('%s: %s (line %s, file "%s"). Stack: "%s" . While processing %s.', err.name || '', err.message || '', err.lineNumber || '', err.fileName || '', err.stack || '', '');
