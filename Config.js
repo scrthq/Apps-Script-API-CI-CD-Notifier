@@ -17,7 +17,7 @@ function getConfig() {
       // This is the verification token provided on the Google Hangouts Chat API configuration page
       "verificationToken": "YUCvWxynTqeNiGzsEAgMhJcIwDaubdXORfoPtlkBjmL="
     },
-    "Github": {
+    "GitHub": {
       "addToQueue": false,
       "repos": ["scrthq/Apps-Script-API-CI-CD-Notifier"],
       "webhooks": []
