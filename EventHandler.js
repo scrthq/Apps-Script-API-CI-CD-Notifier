@@ -50,14 +50,14 @@ function parseSender(event, config) {
       };
     }
     else if (('attachments' in postData && 'text' in postData.attachments[0]) || ('text' in postData && 'channel' in postData)) {
-      if ((/(https:\/\/circleci.com\/.*|^Hello from CircleCI$)/).test(postData.attachments[0].text)) {
+      if ('attachments' in postData && 'text' in postData.attachments[0] && (/(https:\/\/circleci.com\/.*|^Hello from CircleCI$)/).test(postData.attachments[0].text)) {
         sender = {
           "format": "slack",
           "matched": true,
           "sender": "CircleCI"
         };
       }
-      else if ((/https:\/\/ci.appveyor.com\/.*/).test(postData.attachments[0].text)) {
+      else if ('attachments' in postData && 'text' in postData.attachments[0] && (/https:\/\/ci.appveyor.com\/.*/).test(postData.attachments[0].text)) {
         sender = {
           "format": "slack",
           "matched": true,

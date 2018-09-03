@@ -2,6 +2,18 @@ function sendSlackMsg(message, webhook, username, iconUrl, channel, color, exist
   var payload = {}
   if (typeof existingPayload !== 'undefined') {
     payload = existingPayload;
+    if (username !== null && (payload.username === null || typeof payload.username === 'undefined')) {
+      payload.username = username;
+    }
+    if (iconUrl !== null && (payload.icon_url === null || typeof payload.icon_url === 'undefined')) {
+      payload.icon_url = iconUrl;
+    }
+    if (channel !== null && (payload.channel === null || typeof payload.channel === 'undefined')) {
+      payload.channel = channel;
+    }
+    if (color !== null && 'attachments' in payload && (payload.attachments[0].color === null || typeof payload.attachments[0].color === 'undefined')) {
+      payload.attachments[0].color = color;
+    }
   }
   else {
     payload = {
@@ -19,6 +31,7 @@ function sendSlackMsg(message, webhook, username, iconUrl, channel, color, exist
     };
   }
   var options = {
+    'contentType': 'application/json',
     'method': 'post',
     'payload': JSON.stringify(payload)
   };
@@ -26,7 +39,10 @@ function sendSlackMsg(message, webhook, username, iconUrl, channel, color, exist
 }
 
 function sendGChatMsg(message, webhook, includeUserCard, username, iconUrl) {
-  var payload = { "text": message };
+  var payload = {
+    "fallbackText": message,
+    "text": message
+  };
   if (typeof username !== 'undefined' && includeUserCard) {
     payload.cards = [{ "header": { "title": username } }];
     if (typeof iconUrl !== 'undefined') {
@@ -51,6 +67,7 @@ function parseMessage(postData, sender, config) {
     "payload": null,
     "username": null
   };
+  Logger.log('Parsing message from [' + sender.sender + '] with format [' + sender.format + ']');
   switch (sender.format) {
     case 'raw':
       switch (sender.sender) {
@@ -93,6 +110,7 @@ function parseMessage(postData, sender, config) {
       }
       break;
     case 'slack':
+      parsed.payload = postData;
       if (sender.sender === 'CircleCI') {
         parsed.username = 'CircleCI (GAS)'
         parsed.iconUrl = config.CircleCI.icon || 'https://static.brandfolder.com/circleci/logo/circleci-primary-logo.png'
@@ -101,13 +119,22 @@ function parseMessage(postData, sender, config) {
         parsed.username = postData.username || null;
         parsed.iconUrl = postData.icon_url || null;
       }
-      parsed.channel = postData.channel || null;
-      parsed.color = postData.attachments[0].color || null;
-      parsed.message = postData.attachments[0].text || null;
-      parsed.payload = postData;
+      if ('channel' in postData && postData.channel !== null && postData.channel.length > 0) {
+        parsed.channel = postData.channel;
+      }
+      if ('attachments' in postData && 'color' in postData.attachments[0] && postData.attachments[0].color !== null && postData.attachments[0].color.length > 0) {
+        parsed.color = postData.attachments[0].color;
+      }
+      if ('text' in postData && postData.text.length > 0) {
+        parsed.message = postData.text
+      }
+      else if ('attachments' in postData && 'text' in postData.attachments[0] && postData.attachments[0].text !== null && postData.attachments[0].text.length > 0) {
+        parsed.message = postData.attachments[0].text;
+      }
       break;
     default:
       break;
   }
+  Logger.log('Message parsed: ' + JSON.stringify(parsed));
   return parsed;
 }
